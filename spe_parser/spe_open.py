@@ -69,9 +69,13 @@ def xr_open(spe_file, attributes='default'):
     if attributes == 'all':
         attrs = all_attrs
     elif attributes == 'default':
-        key_pairs = {}
+        key_pairs = {
+            'SpeFormat.DataHistories.DataHistory.Origin.Experiment.Devices.Cameras.Camera.Gating.RepetitiveGate.delay': 'gate_delay',
+            'SpeFormat.DataHistories.DataHistory.Origin.Experiment.Devices.Cameras.Camera.Gating.RepetitiveGate.width': 'gate_width'
+        }
         for key, key_name in key_pairs.items():
-            attrs[key] = all_attrs[key]
+            if key in all_attrs[key]:
+                attrs[key] = all_attrs[key]
     elif isinstance(attributes, (list, tuple)):
         for key in attributes:
             attrs[key] = all_attrs[key]
@@ -212,10 +216,10 @@ class SpeFile:
         try:
             wavelength_string = StringIO(self.footer.SpeFormat.Calibrations.WavelengthMapping.Wavelength.cdata)
         except AttributeError:
-            print("XML Footer was not loaded prior to calling _get_wavelength")
+            #print("XML Footer was not loaded prior to calling _get_wavelength")
             return
         except IndexError:
-            print("XML Footer does not contain Wavelength Mapping information")
+            #print("XML Footer does not contain Wavelength Mapping information")
             return
 
         wavelength = np.loadtxt(wavelength_string, delimiter=',')
