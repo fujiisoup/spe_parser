@@ -49,10 +49,20 @@ def xr_open(spe_file, attributes='default'):
 
     spefile = SpeFile(spe_file)
     coords = {}
-
     if spefile.nroi == len(spefile.data[0]):
-        coords['xstart'] = 'roi', [int(spefile.roi[i]['x']) for i in range(spefile.nroi)]
-        coords['ystart'] = 'roi', [int(spefile.roi[i]['y']) for i in range(spefile.nroi)]
+        coords['x_original'] = [
+            np.arange(0, int(spefile.roi[i]['width']), int(spefile.roi[i]['xBinning']))
+            + int(spefile.roi[i]['x'])
+            for i in range(spefile.nroi)
+        ]
+        xsizes = [len(x) for x in coords['x_original']]
+
+        coords['y_original'] = [
+            np.arange(0, int(spefile.roi[i]['height']), int(spefile.roi[i]['yBinning']))
+            + int(spefile.roi[i]['y'])
+            for i in range(spefile.nroi)
+        ]
+        ysizes = [len(y) for y in coords['y_original']]
 
     if spefile.wavelength is not None:
         coords['wavelength'] = 'x', spefile.wavelength
@@ -74,19 +84,50 @@ def xr_open(spe_file, attributes='default'):
             'SpeFormat.DataHistories.DataHistory.Origin.Experiment.Devices.Cameras.Camera.Gating.RepetitiveGate.width': 'gate_width'
         }
         for key, key_name in key_pairs.items():
-            if key in all_attrs[key]:
+            if key in all_attrs:
                 attrs[key] = all_attrs[key]
     elif isinstance(attributes, (list, tuple)):
         for key in attributes:
             attrs[key] = all_attrs[key]
     elif isinstance(attributes, dict):
         for key, newkey in attributes.items():
-            attrs[newkey] = all_attrs[key]
-    
-    return xr.DataArray(
-        spefile.data, dims=['time', 'roi', 'y', 'x'], coords=coords,
-        attrs=attrs
-    )
+            if key in all_attrs:
+                attrs[newkey] = all_attrs[key]
+
+    attrs['light_field_version'] = spefile.header_version
+
+    if len(np.unique(xsizes)) == 1 and len(np.unique(ysizes)) == 1:
+        coords['roi'] = np.arange(spefile.nroi)
+        coords['x_original'] = ('roi', 'x'), coords['x_original']
+        coords['y_original'] = ('roi', 'y'), coords['y_original']
+        data = np.array(spefile.data)
+        if data.shape[-1] != np.array(coords['x_original']).T.shape[0] and data.shape[-1] == 1:
+            coords['x_original'] = ('roi', 'x'), [[0]] * data.shape[1]
+        if data.shape[-2] != np.array(coords['y_original']).T.shape[0] and data.shape[-2] == 1:
+            coords['y_original'] = ('roi', 'y'), [[0]] * data.shape[1]
+        return xr.DataArray(
+            data, dims=['time', 'roi', 'y', 'x'],
+            attrs=attrs, coords=coords
+        )
+
+    da = []
+    for i in range(spefile.nroi):
+        coords1 = coords.copy()
+        coords1['x_original'] = ('x', ), coords['x_original'][i]
+        coords1['y_original'] = ('y', ), coords['y_original'][i]
+        coords1['roi'] = i
+        da.append(xr.DataArray(
+            [spefile.data[t][i] for t in range(len(spefile.data))],
+            dims=['time', 'y', 'x'], coords=coords1,
+            attrs=attrs
+        ))
+
+    if len(np.unique(xsizes)) == 1:
+        return xr.concat([d for d in da], dim='y')
+    elif len(np.unique(ysizes)) == 1:
+        return xr.concat([d for d in da], dim='x')
+    else:
+        return xr.concat([d.stack(xy=['x', 'y']).reset_index('xy') for d in da], dim='xy')
 
 
 class SpeFile:

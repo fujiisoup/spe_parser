@@ -39,6 +39,9 @@ def test_open(filename):
         'SpeFormat.DataHistories.DataHistory.Origin.Experiment.Devices.Cameras.Camera.HardwareIO.AuxOutput.Gate.width':
         'gate_width'
     }
-    data = spe_parser.xr_open(filename, attributes=attrs)
-    assert 'gate_width' in data.attrs 
+    data_new = spe_parser.xr_open(filename, attributes=attrs)
+    
+    for key, item in attrs.items():
+        if key in data.attrs:
+            assert item in data_new.attrs
     
