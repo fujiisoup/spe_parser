@@ -21,7 +21,25 @@ def robust_float(s):
 
 
 def np_open(spe_file):
+    ''' Convert spe_file to np.ndarray
+    All the data will be contained as the Coordinates or attrs
+
+    Parameters
+    ----------
+    spe_file: filename
+    attributes: string or a list of strings
+        'default': attaches default attributes
+        'all': attaches all the attributes
+        list of strings: attaches the corresponding attributes
+        dict: a mapping from original key to new key
+
+    Returns
+    -------
+    array: np.ndarray
+    info: dict of metadata
+    '''
     data = SpeFile(spe_file)
+    # TODO store metadata into a dict
     return data.data, []
     
 
@@ -101,10 +119,12 @@ def xr_open(spe_file, attributes='default'):
         coords['x_original'] = ('roi', 'x'), coords['x_original']
         coords['y_original'] = ('roi', 'y'), coords['y_original']
         data = np.array(spefile.data)
-        if data.shape[-1] != np.array(coords['x_original']).T.shape[0] and data.shape[-1] == 1:
-            coords['x_original'] = ('roi', 'x'), [[0]] * data.shape[1]
-        if data.shape[-2] != np.array(coords['y_original']).T.shape[0] and data.shape[-2] == 1:
-            coords['y_original'] = ('roi', 'y'), [[0]] * data.shape[1]
+        
+        print(np.array(coords['y_original'][-1]).shape)
+        if data.shape[-1] != np.array(coords['x_original'][-1]).shape[-1]:
+            coords['x_original'] = ('roi', 'x'), [[0]] * data.shape[-1]
+        if data.shape[-2] != np.array(coords['y_original'][-1]).shape[-1]:
+            coords['y_original'] = ('roi', 'y'), np.zeros((1, data.shape[-2]))
         return xr.DataArray(
             data, dims=['time', 'roi', 'y', 'x'],
             attrs=attrs, coords=coords
@@ -139,7 +159,7 @@ class SpeFile:
         assert isinstance(filepath, str), 'Filepath must be a single string'
         self.filepath = filepath
  
-        with open(self.filepath) as file:
+        with open(self.filepath, encoding="utf8") as file:
             self.header_version = read_at(file, 1992, 3, np.float32)[0]
             assert self.header_version >= 3.0, \
                 'This version of spe2py cannot load filetype SPE v. %.1f' % self.header_version
