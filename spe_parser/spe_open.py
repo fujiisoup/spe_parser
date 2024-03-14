@@ -82,7 +82,7 @@ def xr_open(spe_file, attributes='default'):
         ]
         ysizes = [len(y) for y in coords['y_original']]
 
-    if spefile.wavelength is not None:
+    if spefile.wavelength is not None and len(spefile.wavelength) == len(coords['x_original'][0]):
         coords['wavelength'] = 'x', spefile.wavelength
 
     all_attrs = spefile.extract_all_metadata()
@@ -120,7 +120,6 @@ def xr_open(spe_file, attributes='default'):
         coords['y_original'] = ('roi', 'y'), coords['y_original']
         data = np.array(spefile.data)
         
-        print(np.array(coords['y_original'][-1]).shape)
         if data.shape[-1] != np.array(coords['x_original'][-1]).shape[-1]:
             coords['x_original'] = ('roi', 'x'), [[0]] * data.shape[-1]
         if data.shape[-2] != np.array(coords['y_original'][-1]).shape[-1]:
@@ -256,7 +255,18 @@ class SpeFile:
         """
         try:
             camerasettings = self.footer.SpeFormat.DataHistories.DataHistory.Origin.Experiment.Devices.Cameras.Camera
+            regionofinterest_selection = camerasettings.ReadoutControl.RegionsOfInterest.Selection
             regionofinterest = camerasettings.ReadoutControl.RegionsOfInterest.CustomRegions.RegionOfInterest
+            
+            if regionofinterest_selection.cdata == 'BinnedSensor':
+                roi = {}
+                for key in ['x', 'xBinning', 'width', 'y', 'yBinning', 'height']:
+                    roi[key] = regionofinterest[key]
+                binned_sensor = camerasettings.ReadoutControl.RegionsOfInterest.BinnedSensor
+                roi['xBinning'] = int(binned_sensor.XBinning.cdata)
+                roi['yBinning'] = int(binned_sensor.YBinning.cdata)
+                regionofinterest = roi
+
         except AttributeError:
             print("XML Footer was not loaded prior to calling _get_roi_info")
             raise
