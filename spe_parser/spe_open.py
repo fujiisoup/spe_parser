@@ -258,25 +258,27 @@ class SpeFile:
             regionofinterest_selection = camerasettings.ReadoutControl.RegionsOfInterest.Selection
             regionofinterest = camerasettings.ReadoutControl.RegionsOfInterest.CustomRegions.RegionOfInterest
             
-            if regionofinterest_selection.cdata == 'BinnedSensor':
-                roi = {}
-                for key in ['x', 'xBinning', 'width', 'y', 'yBinning', 'height']:
-                    roi[key] = regionofinterest[key]
-                binned_sensor = camerasettings.ReadoutControl.RegionsOfInterest.BinnedSensor
-                roi['xBinning'] = int(binned_sensor.XBinning.cdata)
-                roi['yBinning'] = int(binned_sensor.YBinning.cdata)
-                regionofinterest = roi
+            if not isinstance(regionofinterest, list):
+                regionofinterest = [regionofinterest]
+                nroi = 1
+            else:
+                nroi = len(regionofinterest)
 
-        except AttributeError:
+            if regionofinterest_selection.cdata == 'BinnedSensor':
+                roi = []
+                for regionofinterest1 in regionofinterest:
+                    roi.append({})
+                    for key in ['x', 'xBinning', 'width', 'y', 'yBinning', 'height']:
+                        roi[-1][key] = regionofinterest1[key]
+                    binned_sensor = camerasettings.ReadoutControl.RegionsOfInterest.BinnedSensor
+                    roi[-1]['xBinning'] = int(binned_sensor.XBinning.cdata)
+                    roi[-1]['yBinning'] = int(binned_sensor.YBinning.cdata)
+            else:
+                roi = regionofinterest
+    
+        except (AttributeError):
             print("XML Footer was not loaded prior to calling _get_roi_info")
             raise
-
-        if isinstance(regionofinterest, list):
-            nroi = len(regionofinterest)
-            roi = regionofinterest
-        else:
-            nroi = 1
-            roi = [regionofinterest]
 
         return roi, nroi
 
