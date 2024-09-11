@@ -99,11 +99,12 @@ def xr_open(spe_file, attributes='default'):
     elif attributes == 'default':
         key_pairs = {
             'SpeFormat.DataHistories.DataHistory.Origin.Experiment.Devices.Cameras.Camera.Gating.RepetitiveGate.delay': 'gate_delay',
-            'SpeFormat.DataHistories.DataHistory.Origin.Experiment.Devices.Cameras.Camera.Gating.RepetitiveGate.width': 'gate_width'
+            'SpeFormat.DataHistories.DataHistory.Origin.Experiment.Devices.Cameras.Camera.Gating.RepetitiveGate.width': 'gate_width',
+            #'SpeFormat.DataHistories.DataHistory.Origin.Experiment.Devices.Cameras.Camera.Intensifier'
         }
         for key, key_name in key_pairs.items():
             if key in all_attrs:
-                attrs[key] = all_attrs[key]
+                attrs[key_name] = all_attrs[key]
     elif isinstance(attributes, (list, tuple)):
         for key in attributes:
             attrs[key] = all_attrs[key]
@@ -170,7 +171,7 @@ class SpeFile:
 
             # Note: these methods depend on self.footer
             self.xdim, self.ydim = self._get_dims()
-            self.roi, self.nroi = self._get_roi_info()
+            self.roi, self.nroi, self.roi_selection = self._get_roi_info()
             self.wavelength = self._get_wavelength()
 
             self.xcoord, self.ycoord = self._get_coords()
@@ -256,31 +257,44 @@ class SpeFile:
         try:
             camerasettings = self.footer.SpeFormat.DataHistories.DataHistory.Origin.Experiment.Devices.Cameras.Camera
             regionofinterest_selection = camerasettings.ReadoutControl.RegionsOfInterest.Selection
-            regionofinterest = camerasettings.ReadoutControl.RegionsOfInterest.CustomRegions.RegionOfInterest
-            
-            if not isinstance(regionofinterest, list):
-                regionofinterest = [regionofinterest]
-                nroi = 1
-            else:
-                nroi = len(regionofinterest)
 
-            if regionofinterest_selection.cdata == 'BinnedSensor':
-                roi = []
-                for regionofinterest1 in regionofinterest:
-                    roi.append({})
-                    for key in ['x', 'xBinning', 'width', 'y', 'yBinning', 'height']:
-                        roi[-1][key] = regionofinterest1[key]
-                    binned_sensor = camerasettings.ReadoutControl.RegionsOfInterest.BinnedSensor
-                    roi[-1]['xBinning'] = int(binned_sensor.XBinning.cdata)
-                    roi[-1]['yBinning'] = int(binned_sensor.YBinning.cdata)
-            else:
+            roi_selection = regionofinterest_selection.cdata
+            if roi_selection == 'BinnedSensor':
+                binned_sensor = camerasettings.ReadoutControl.RegionsOfInterest.BinnedSensor
+                nroi = 1
+                roi = [{
+                    'x': 0,
+                    'xBinning': int(binned_sensor.XBinning.cdata),
+                    'height': int(camerasettings.Sensor.Layout.ActiveArea.Height.cdata),
+                    'y': 0,
+                    'yBinning': int(binned_sensor.YBinning.cdata),
+                    'width': int(camerasettings.Sensor.Layout.ActiveArea.Width.cdata),
+                }]
+
+            elif roi_selection == 'CustomRegions':
+                regionofinterest = camerasettings.ReadoutControl.RegionsOfInterest.CustomRegions.RegionOfInterest
+                if not isinstance(regionofinterest, list):
+                    regionofinterest = [regionofinterest]
+                    nroi = 1
+                else:
+                    nroi = len(regionofinterest)
                 roi = regionofinterest
+            else:
+                nroi = 1
+                roi = roi = [{
+                    'x': 0,
+                    'xBinning': 1,
+                    'height': int(camerasettings.Sensor.Layout.ActiveArea.Height.cdata),
+                    'y': 0,
+                    'yBinning': 1,
+                    'width': int(camerasettings.Sensor.Layout.ActiveArea.Width.cdata),
+                }]
     
         except (AttributeError):
             print("XML Footer was not loaded prior to calling _get_roi_info")
             raise
 
-        return roi, nroi
+        return roi, nroi, roi_selection
 
     def _get_wavelength(self):
         """
@@ -393,7 +407,8 @@ class SpeFile:
                     for newkey, newitem in newobj._attributes.items():
                         if newkey != 'id':
                             dicts[newkey] = newitem
-
+                    if newobj.cdata != '':
+                        dicts[k] = newobj.cdata
                     newdict = extract(newobj)
                     for newkey, newitem in newdict.items():
                         dicts[k + '.' + newkey] = newitem
